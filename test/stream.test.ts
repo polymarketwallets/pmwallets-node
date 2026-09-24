@@ -141,6 +141,21 @@ describe('FillStream', () => {
   });
 });
 
+describe('FillStream without a cursor', () => {
+  it('does not replay all history when nothing was delivered yet (unless asked to)', async () => {
+    const h = harness([fill(5, 1)]);
+    await h.stream.start(); await tick();
+    h.sockets[0]!.send({ type: 'hello', session: 'A', seq: 0 });
+    await tick();
+    h.sockets[0]!.close(1006); await tick();
+    h.sockets[1]!.send({ type: 'hello', session: 'B', seq: 0 });
+    await tick();
+    expect(h.replays).toEqual([]);
+    expect(h.events.some((e) => e.type === 'gap' && e.skipped === 'no_cursor')).toBe(true);
+    await h.stream.stop();
+  });
+});
+
 describe('FileStateStore', () => {
   it('round-trips and returns null when there is no file yet', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'pmw-'));

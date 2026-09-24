@@ -51,7 +51,7 @@ export type StreamEvent =
   | { type: 'connecting'; url: string }
   | { type: 'connected' }
   | { type: 'hello'; session: string; seq: number }
-  | { type: 'gap'; reason: 'new_session' | 'seq_skip'; fromBlock: number; fromLogIndex: number }
+  | { type: 'gap'; reason: 'new_session' | 'seq_skip'; fromBlock: number; fromLogIndex: number; skipped?: 'no_cursor' }
   | { type: 'replayed'; delivered: number }
   | { type: 'disconnected'; code: number; reason: string }
   /** Another connection with the same account took over (one stream per account, newest wins). */
@@ -95,6 +95,12 @@ export interface FillStreamOptions {
   socketFactory?: SocketFactory;
   /** extra options for the `ws` client, e.g. `{ agent }` to go through a proxy */
   wsOptions?: ClientOptions;
+  /**
+   * Before the first fill is delivered there is no position to replay from, and replaying from zero
+   * returns every fill since each subscription began. Default false: skip that replay (a live
+   * consumer such as a copy bot has no use for history). Set true to get the full backlog.
+   */
+  replayWithoutCursor?: boolean;
 }
 
 interface Frame { type?: string; session?: string; seq?: number; data?: Fill }
@@ -128,6 +134,7 @@ export class FillStream {
       minBackoffMs: options.minBackoffMs ?? 1_000,
       maxBackoffMs: options.maxBackoffMs ?? 30_000,
       seenCapacity: options.seenCapacity ?? 10_000,
+      replayWithoutCursor: options.replayWithoutCursor ?? false,
     };
     this.store = options.store ?? new MemoryStateStore();
     this.socketFactory = options.socketFactory
@@ -260,6 +267,10 @@ export class FillStream {
   }
 
   private async replay(reason: 'new_session' | 'seq_skip'): Promise<void> {
+    if (this.state.block === 0 && !this.opts.replayWithoutCursor) {
+      this.emit({ type: 'gap', reason, fromBlock: 0, fromLogIndex: 0, skipped: 'no_cursor' });
+      return;
+    }
     this.emit({ type: 'gap', reason, fromBlock: this.state.block, fromLogIndex: this.state.logIndex });
     let delivered = 0;
     for await (const fill of this.opts.client.fillsSince({ sinceBlock: this.state.block, sinceLogIndex: this.state.logIndex })) {
