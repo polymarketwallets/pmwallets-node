@@ -104,6 +104,13 @@ export interface FillStreamOptions {
    * since each subscription began.
    */
   replayWithoutCursor?: boolean;
+  /**
+   * How far behind the chain head to anchor (default 200 blocks, ~5 min). The head can run ahead of
+   * the fills already indexed for your account; anchoring exactly at it could exclude a fill that was
+   * mined earlier but not yet pushed when you connected. The extra blocks are replayed at most once
+   * more and dropped by eventId, so erring early costs nothing but a few duplicates.
+   */
+  anchorLagBlocks?: number;
 }
 
 interface Frame { type?: string; session?: string; seq?: number; data?: Fill }
@@ -138,6 +145,7 @@ export class FillStream {
       maxBackoffMs: options.maxBackoffMs ?? 30_000,
       seenCapacity: options.seenCapacity ?? 10_000,
       replayWithoutCursor: options.replayWithoutCursor ?? false,
+      anchorLagBlocks: options.anchorLagBlocks ?? 200,
     };
     this.store = options.store ?? new MemoryStateStore();
     this.socketFactory = options.socketFactory
@@ -279,10 +287,10 @@ export class FillStream {
     const r = await this.opts.client.latency();
     const head = Number((r['head'] as { block?: unknown } | undefined)?.block);
     if (!Number.isInteger(head) || head <= 0) throw new Error('could not read the chain head to anchor the stream');
-    // strictly-after semantics: everything from the head block on
-    this.state.block = head - 1;
+    // strictly-after semantics: everything from (head − lag) on; never 0, which means "no position"
+    this.state.block = Math.max(1, head - this.opts.anchorLagBlocks - 1);
     this.state.logIndex = 0xffffffff;
-    this.emit({ type: 'anchored', block: head });
+    this.emit({ type: 'anchored', block: this.state.block + 1 });
   }
 
   private async replay(reason: 'new_session' | 'seq_skip'): Promise<void> {
