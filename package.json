@@ -1,0 +1,22 @@
+{
+  "name": "pmwallets",
+  "version": "0.1.0",
+  "description": "Official PMWallets SDK: Polymarket smart-money leaderboard, real-time wallet fills over WebSocket with gap replay, webhooks and exports.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["polymarket", "copy-trading", "wallet-tracker", "smart-money", "pmwallets", "prediction-markets"],
+  "homepage": "https://pmwallets.com/docs",
+  "license": "MIT",
+  "dependencies": { "ws": "^8.21.3" },
+  "devDependencies": { "@types/node": "^22.0.0", "@types/ws": "^8.5.12", "typescript": "^5.6.0", "vitest": "^3.2.0" }
+}
