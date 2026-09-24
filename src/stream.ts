@@ -51,7 +51,9 @@ export type StreamEvent =
   | { type: 'connecting'; url: string }
   | { type: 'connected' }
   | { type: 'hello'; session: string; seq: number }
-  | { type: 'gap'; reason: 'new_session' | 'seq_skip'; fromBlock: number; fromLogIndex: number; skipped?: 'no_cursor' }
+  | { type: 'gap'; reason: 'new_session' | 'seq_skip'; fromBlock: number; fromLogIndex: number }
+  /** first connection: the position was set to the chain head */
+  | { type: 'anchored'; block: number }
   | { type: 'replayed'; delivered: number }
   | { type: 'disconnected'; code: number; reason: string }
   /** Another connection with the same account took over (one stream per account, newest wins). */
@@ -96,9 +98,10 @@ export interface FillStreamOptions {
   /** extra options for the `ws` client, e.g. `{ agent }` to go through a proxy */
   wsOptions?: ClientOptions;
   /**
-   * Before the first fill is delivered there is no position to replay from, and replaying from zero
-   * returns every fill since each subscription began. Default false: skip that replay (a live
-   * consumer such as a copy bot has no use for history). Set true to get the full backlog.
+   * Where to start when there is no saved position. Default false: at the first connection the cursor
+   * is anchored at the current chain head, so a disconnect before the first fill is still replayed —
+   * but the history from before you started is not. true: start from zero and receive every fill
+   * since each subscription began.
    */
   replayWithoutCursor?: boolean;
 }
@@ -250,7 +253,8 @@ export class FillStream {
       // A new session means the socket was down (or this process was): everything since the last
       // delivered fill may be missing. Replay BEFORE adopting the session — adopting first is what
       // silently swallows an outage.
-      if (this.state.session !== null && m.session !== this.state.session) await this.replay('new_session');
+      if (this.state.block === 0 && !this.opts.replayWithoutCursor) await this.anchor();
+      else if (this.state.session !== null && m.session !== this.state.session) await this.replay('new_session');
       this.state.session = m.session;
       this.state.seq = m.seq ?? 0;
       await this.store.save(this.state);
@@ -266,11 +270,22 @@ export class FillStream {
     await this.store.save(this.state);
   }
 
+  /**
+   * No position yet: take the chain head as the starting point. Without it a disconnect before the
+   * first fill could not be replayed (there would be nothing to replay from), and replaying from zero
+   * would hand the consumer every fill since each subscription began.
+   */
+  private async anchor(): Promise<void> {
+    const r = await this.opts.client.latency();
+    const head = Number((r['head'] as { block?: unknown } | undefined)?.block);
+    if (!Number.isInteger(head) || head <= 0) throw new Error('could not read the chain head to anchor the stream');
+    // strictly-after semantics: everything from the head block on
+    this.state.block = head - 1;
+    this.state.logIndex = 0xffffffff;
+    this.emit({ type: 'anchored', block: head });
+  }
+
   private async replay(reason: 'new_session' | 'seq_skip'): Promise<void> {
-    if (this.state.block === 0 && !this.opts.replayWithoutCursor) {
-      this.emit({ type: 'gap', reason, fromBlock: 0, fromLogIndex: 0, skipped: 'no_cursor' });
-      return;
-    }
     this.emit({ type: 'gap', reason, fromBlock: this.state.block, fromLogIndex: this.state.logIndex });
     let delivered = 0;
     for await (const fill of this.opts.client.fillsSince({ sinceBlock: this.state.block, sinceLogIndex: this.state.logIndex })) {

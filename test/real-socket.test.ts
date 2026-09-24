@@ -7,13 +7,16 @@ import { FillStream, type StreamEvent } from '../src/stream.js';
 
 /** a local stand-in for /v1/ws that accepts one key and greets like the real gateway */
 async function server() {
-  const http = createServer((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"rows":[],"next":null,"subscriptions":1}'); });
+  const http = createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(req.url?.startsWith('/v1/latency') ? '{"head":{"block":1}}' : '{"rows":[],"next":null,"subscriptions":1}');
+  });
   const wss = new WebSocketServer({ noServer: true });
   http.on('upgrade', (req, socket, head) => {
     if (req.headers['x-api-key'] !== 'good') { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws.send(JSON.stringify({ type: 'hello', userId: 'u', session: 'S', seq: 0 }));
-      ws.send(JSON.stringify({ type: 'fill', session: 'S', seq: 1, data: { eventId: 'e1', block: 1, logIndex: 0 } }));
+      ws.send(JSON.stringify({ type: 'fill', session: 'S', seq: 1, data: { eventId: 'e1', block: 2, logIndex: 0 } }));
     });
   });
   await new Promise<void>((r) => http.listen(0, '127.0.0.1', r));

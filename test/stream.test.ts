@@ -24,7 +24,7 @@ class FakeSocket implements SocketLike {
   terminate() { this.terminated = true; this.fire('close', 1006, Buffer.from('')); }
 }
 
-function harness(ledger: Fill[], opts: { failOn?: string } = {}) {
+function harness(ledger: Fill[], opts: { failOn?: string; head?: number } = {}) {
   const sockets: FakeSocket[] = [];
   const replays: FillCursor[] = [];
   const delivered: { id: string; source: string }[] = [];
@@ -33,6 +33,7 @@ function harness(ledger: Fill[], opts: { failOn?: string } = {}) {
   const client = {
     apiKey: 'pmw_x_y',
     wsUrl: 'wss://example/v1/ws',
+    async latency() { return { head: { block: opts.head ?? 9 } }; },
     async *fillsSince(c: FillCursor) {
       replays.push(c);
       for (const f of ledger) if (f.block > c.sinceBlock || (f.block === c.sinceBlock && f.logIndex > c.sinceLogIndex)) yield f;
@@ -141,17 +142,19 @@ describe('FillStream', () => {
   });
 });
 
-describe('FillStream without a cursor', () => {
-  it('does not replay all history when nothing was delivered yet (unless asked to)', async () => {
-    const h = harness([fill(5, 1)]);
+describe('FillStream starting point', () => {
+  it('anchors at the chain head on the first hello, so a disconnect before the first fill is still replayed', async () => {
+    const ledger = [fill(99, 3), fill(101, 1)]; // 99 is history from before we started
+    const h = harness(ledger, { head: 100 });
     await h.stream.start(); await tick();
     h.sockets[0]!.send({ type: 'hello', session: 'A', seq: 0 });
     await tick();
+    expect(h.stream.position).toMatchObject({ block: 99, logIndex: 0xffffffff });
     h.sockets[0]!.close(1006); await tick();
     h.sockets[1]!.send({ type: 'hello', session: 'B', seq: 0 });
     await tick();
-    expect(h.replays).toEqual([]);
-    expect(h.events.some((e) => e.type === 'gap' && e.skipped === 'no_cursor')).toBe(true);
+    expect(h.replays).toEqual([{ sinceBlock: 99, sinceLogIndex: 0xffffffff }]);
+    expect(h.delivered.map((d) => d.id)).toEqual([ledger[1]!.eventId]);
     await h.stream.stop();
   });
 });
