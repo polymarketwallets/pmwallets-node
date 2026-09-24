@@ -56,7 +56,7 @@ export type StreamEvent =
   | { type: 'anchored'; block: number }
   | { type: 'replayed'; delivered: number }
   | { type: 'disconnected'; code: number; reason: string }
-  /** Another connection with the same account took over (one stream per account, newest wins). */
+  /** Another API connection with the same account took over (one stream per account; between API connections the newest wins). */
   | { type: 'replaced' }
   | { type: 'error'; error: Error }
   /** Unrecoverable (bad or revoked key): the stream has stopped. */

@@ -1,6 +1,6 @@
 {
   "name": "pmwallets",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official PMWallets SDK: Polymarket smart-money leaderboard, real-time wallet fills over WebSocket with gap replay, webhooks and exports.",
   "type": "module",
   "main": "./dist/index.js",
