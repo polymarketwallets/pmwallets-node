@@ -26,7 +26,7 @@ npm install pmwallets     # Node.js ≥ 20
 
 每个账户只有一条推送流。API key 建立的连接优先于 pmwallets.com 的推送页（推送页不会抢走它的流）；两条 API 连接之间仍是后连的顶掉先连的，所以一个账户只跑一个消费者。
 
-PMWallets 的服务器在英国：消费者部署在英国或欧洲其他地区，收到成交最快。
+PMWallets 的服务器在英国。若还要在 Polymarket 下单，请部署在爱尔兰（AWS eu-west-1）：Polymarket 不接受来自英国、美国及部分欧盟国家的 API 订单。
 
 ## 相关链接
 
