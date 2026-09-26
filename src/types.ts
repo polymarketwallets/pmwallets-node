@@ -102,3 +102,5 @@ export interface Leaderboard {
 }
 
 export interface ExportInput { entityIds: string[]; from: string; to: string }
+/** one daily file an export grants; `path` answers with a redirect to the file (see exportFileUrl) */
+export interface ExportFile { wallet: string; day: string; rows: number; bytes: number; path: string }

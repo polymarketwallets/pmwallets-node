@@ -46,6 +46,36 @@ describe('PmwClient', () => {
   });
 });
 
+describe('daily export files', () => {
+  const W = `0x${'ab'.repeat(20)}`;
+  it('reads the redirect instead of following it, so the key never reaches the storage host', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fn = (async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), init });
+      if (String(url).startsWith('https://api.example.com/')) return new Response(null, { status: 302, headers: { location: 'https://r2.example/signed' } });
+      return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+    }) as unknown as typeof fetch;
+    const c = new PmwClient({ apiKey: 'pmw_a_b', baseUrl: 'https://api.example.com', fetch: fn });
+    expect(await c.downloadExportFile(W, '2026-09-25')).toEqual(new Uint8Array([1, 2, 3]));
+    expect(calls[0]!.url).toBe(`https://api.example.com/v1/account/data/${W}/2026-09-25`);
+    expect(calls[0]!.init.redirect).toBe('manual');
+    expect(calls[1]!.url).toBe('https://r2.example/signed');
+    expect(JSON.stringify(calls[1]!.init.headers ?? {}), 'the key was sent to the storage host').not.toContain('pmw_a_b');
+  });
+  it('raises PmwError when there is no purchased file', async () => {
+    const f = fakeFetch([{ statusCode: 404, message: 'no purchased file for this wallet and day' }], 404);
+    const err = await new PmwClient({ apiKey: 'k', fetch: f.fn }).exportFileUrl(W, '2026-09-25').catch((e) => e);
+    expect(err).toBeInstanceOf(PmwError);
+    expect(err.status).toBe(404);
+  });
+  it('lists the files of an export', async () => {
+    const f = fakeFetch([{ files: [{ wallet: W, day: '2026-09-25', rows: 3, bytes: 90, path: `/v1/account/data/${W}/2026-09-25` }] }]);
+    const r = await new PmwClient({ apiKey: 'k', baseUrl: 'https://api.example.com', fetch: f.fn }).exportFiles('o1');
+    expect(f.calls[0]!.url).toBe('https://api.example.com/v1/account/exports/o1/files');
+    expect(r.files[0]!.day).toBe('2026-09-25');
+  });
+});
+
 describe('verifyWebhook', () => {
   const body = '{"type":"fill","data":{}}';
   const sig = createHmac('sha256', 'sec').update(body).digest('hex');

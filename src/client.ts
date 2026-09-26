@@ -1,5 +1,5 @@
 import type {
-  ExportInput, Fill, FillCursor, FillsPage, Leaderboard, LeaderboardQuery, SubscribeInput, Subscription,
+  ExportFile, ExportInput, Fill, FillCursor, FillsPage, Leaderboard, LeaderboardQuery, SubscribeInput, Subscription,
 } from './types.js';
 
 export const DEFAULT_BASE_URL = 'https://api.pmwallets.com';
@@ -131,8 +131,33 @@ export class PmwClient {
   getExport(id: string): Promise<Record<string, unknown>> {
     return this.request('GET', `/v1/account/exports/${encodeURIComponent(id)}`);
   }
-  /** A presigned download URL, valid 15 minutes. */
-  exportDownload(id: string): Promise<{ url: string; expiresInSec: number; fileName: string }> {
-    return this.request('GET', `/v1/account/exports/${encodeURIComponent(id)}/download`);
+  /** The daily files an export grants: one per wallet per UTC day. */
+  exportFiles(id: string): Promise<{ files: ExportFile[] }> {
+    return this.request('GET', `/v1/account/exports/${encodeURIComponent(id)}/files`);
+  }
+  /**
+   * A short-lived (5 minute) link to one purchased daily file. The API checks the purchase and
+   * answers with a redirect; the redirect is read here rather than followed, so your key is never
+   * sent to the storage host.
+   */
+  async exportFileUrl(wallet: string, day: string): Promise<string> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/account/data/${encodeURIComponent(wallet)}/${encodeURIComponent(day)}`, {
+      headers: { 'x-api-key': this.apiKey, accept: 'application/json' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    const location = res.headers.get('location');
+    if (res.status >= 300 && res.status < 400 && location) { await res.body?.cancel(); return location; }
+    const text = await res.text();
+    let parsed: unknown = text;
+    if (text) { try { parsed = JSON.parse(text); } catch { /* keep the raw text */ } }
+    throw new PmwError(res.status, parsed);
+  }
+  /** One purchased daily file: zstd-compressed CSV bytes (`.csv.zst`). */
+  async downloadExportFile(wallet: string, day: string): Promise<Uint8Array> {
+    const url = await this.exportFileUrl(wallet, day);
+    const res = await this.fetchImpl(url, { signal: AbortSignal.timeout(Math.max(this.timeoutMs, 60_000)) });
+    if (!res.ok) throw new PmwError(res.status, await res.text());
+    return new Uint8Array(await res.arrayBuffer());
   }
 }

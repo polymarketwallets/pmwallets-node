@@ -28,6 +28,20 @@ npm install pmwallets     # Node.js ≥ 20
 
 PMWallets 的服务器在英国。若还要在 Polymarket 下单，请部署在爱尔兰（AWS eu-west-1）：Polymarket 不接受来自英国、美国及部分欧盟国家的 API 订单。
 
+## 历史成交导出
+
+购买得到的是文件的访问权:每个钱包每个 UTC 日一个 zstd 压缩的 CSV,付款后立即可下载,之后也能再下。
+
+```ts
+const order = await client.createExport({ entityIds: ['0x…'], from: '2026-09-01', to: '2026-09-30' });
+const { files } = await client.exportFiles(String(order.id));
+for (const f of files) {
+  const bytes = await client.downloadExportFile(f.wallet, f.day); // .csv.zst
+}
+```
+
+`exportFileUrl(wallet, day)` 只返回短时效链接;API key 不会发给存储服务。
+
 ## 相关链接
 
 - [Polymarket 聪明钱排行榜](https://pmwallets.com/zh) —— 从 Polygon 链上计算的 Polymarket 盈利交易者，胜率带置信区间
