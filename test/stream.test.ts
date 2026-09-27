@@ -24,8 +24,9 @@ class FakeSocket implements SocketLike {
   terminate() { this.terminated = true; this.fire('close', 1006, Buffer.from('')); }
 }
 
-function harness(ledger: Fill[], opts: { failOn?: string; head?: number } = {}) {
+function harness(ledger: Fill[], opts: { failOn?: string; head?: number; takeover?: boolean } = {}) {
   const sockets: FakeSocket[] = [];
+  const urls: URL[] = [];
   const replays: FillCursor[] = [];
   const delivered: { id: string; source: string }[] = [];
   const events: StreamEvent[] = [];
@@ -41,15 +42,15 @@ function harness(ledger: Fill[], opts: { failOn?: string; head?: number } = {}) 
   } as unknown as PmwClient;
   const store = new MemoryStateStore();
   const stream = new FillStream({
-    client, store, minBackoffMs: 1, maxBackoffMs: 2,
-    socketFactory: () => { const s = new FakeSocket(); sockets.push(s); queueMicrotask(() => s.fire('open')); return s; },
+    client, store, minBackoffMs: 1, maxBackoffMs: 2, takeover: opts.takeover,
+    socketFactory: (url) => { urls.push(new URL(url)); const s = new FakeSocket(); sockets.push(s); queueMicrotask(() => s.fire('open')); return s; },
     onFill: (f, meta) => {
       if (failOnce === f.eventId) { failOnce = undefined; throw new Error('handler failed'); }
       delivered.push({ id: f.eventId, source: meta.source });
     },
     onEvent: (e) => events.push(e),
   });
-  return { stream, sockets, replays, delivered, events, store };
+  return { stream, sockets, replays, delivered, events, store, urls };
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 10));
@@ -132,13 +133,69 @@ describe('FillStream', () => {
     await h.stream.stop();
   });
 
-  it('reports a takeover by another connection', async () => {
+  it('replaced by another client\'s takeover: stops for good instead of taking the stream back', async () => {
     const h = harness([]);
     await h.stream.start(); await tick();
     h.sockets[0]!.fire('close', 1000, Buffer.from('replaced by a newer connection'));
-    await tick();
+    await tick(); await tick();
     expect(h.events.some((e) => e.type === 'replaced')).toBe(true);
+    expect(h.events.some((e) => e.type === 'fatal')).toBe(true);
+    expect(h.sockets.length, 'reconnecting would take the stream back and the two would fight').toBe(1);
     await h.stream.stop();
+  });
+
+  it('refused because another client holds the stream (4411): stops for good and says how to take over', async () => {
+    const h = harness([]);
+    await h.stream.start(); await tick();
+    h.sockets[0]!.send({ type: 'blocked', reason: 'api_seat_taken' });
+    h.sockets[0]!.fire('close', 4411, Buffer.from('another API client is connected'));
+    await tick(); await tick();
+    expect(h.events.some((e) => e.type === 'blocked')).toBe(true);
+    const fatal = h.events.find((e) => e.type === 'fatal') as { error: Error } | undefined;
+    expect(fatal?.error.message).toMatch(/takeover/);
+    expect(h.sockets.length).toBe(1);
+    await h.stream.stop();
+  });
+
+  it('a server restart (1012) reconnects at once, without waiting out a backoff', async () => {
+    const h = harness([]);
+    // a backoff long enough that a test would time out waiting for it
+    (h.stream as unknown as { opts: { minBackoffMs: number; maxBackoffMs: number } }).opts.minBackoffMs = 60_000;
+    await h.stream.start(); await tick();
+    h.sockets[0]!.send({ type: 'hello', session: 'A', seq: 0 });
+    await tick();
+    h.sockets[0]!.fire('close', 1012, Buffer.from('service restart; reconnect now'));
+    await tick(); await tick();
+    expect(h.events.some((e) => e.type === 'restarting')).toBe(true);
+    expect(h.sockets.length).toBe(2);
+    await h.stream.stop();
+  });
+
+  it('sends its clientId on every connection; takeover only until it is first seated', async () => {
+    const h = harness([], { takeover: true });
+    await h.stream.start(); await tick();
+    h.sockets[0]!.send({ type: 'hello', session: 'A', seq: 0 });
+    await tick();
+    h.sockets[0]!.fire('close', 1006, Buffer.from(''));
+    await tick(); await tick();
+    expect(h.urls.length).toBe(2);
+    const id = h.urls[0]!.searchParams.get('clientId');
+    expect(id).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    expect(h.urls[1]!.searchParams.get('clientId'), 'the same id, so the server knows it is us coming back').toBe(id);
+    expect(h.urls[0]!.searchParams.get('takeover')).toBe('1');
+    expect(h.urls[1]!.searchParams.get('takeover'), 'a reconnect must not snatch the stream from a client that took it meanwhile').toBeNull();
+    await h.stream.stop();
+  });
+
+  it('never asks to take over unless told to', async () => {
+    const h = harness([]);
+    await h.stream.start(); await tick();
+    expect(h.urls[0]!.searchParams.get('takeover')).toBeNull();
+    await h.stream.stop();
+  });
+
+  it('refuses a malformed clientId up front', () => {
+    expect(() => new FillStream({ client: {} as PmwClient, onFill: () => undefined, clientId: 'short' })).toThrow(/clientId/);
   });
 });
 

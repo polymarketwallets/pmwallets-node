@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import WebSocket, { type ClientOptions } from 'ws';
@@ -56,8 +57,18 @@ export type StreamEvent =
   | { type: 'anchored'; block: number }
   | { type: 'replayed'; delivered: number }
   | { type: 'disconnected'; code: number; reason: string }
-  /** Another API connection with the same account took over (one stream per account; between API connections the newest wins). */
+  /**
+   * Another API client of this account took the stream over with `takeover: true`. The stream stops
+   * (a `fatal` follows): reconnecting would take it back and the two would fight over it.
+   */
   | { type: 'replaced' }
+  /**
+   * Another API client of this account already holds the stream (one per account; the first one keeps
+   * it). The stream stops (a `fatal` follows). Pass `takeover: true` to replace it instead.
+   */
+  | { type: 'blocked' }
+  /** The server is restarting: reconnecting at once, no backoff. */
+  | { type: 'restarting' }
   | { type: 'error'; error: Error }
   /** Unrecoverable (bad or revoked key): the stream has stopped. */
   | { type: 'fatal'; error: Error };
@@ -111,7 +122,23 @@ export interface FillStreamOptions {
    * more and dropped by eventId, so erring early costs nothing but a few duplicates.
    */
   anchorLagBlocks?: number;
+  /**
+   * One stream per account, and the API client that connected FIRST keeps it: a second one is refused
+   * (`blocked`, then `fatal`). Set true to take the stream over from whichever client holds it — that
+   * client is told `replaced` and stops. Only the first connection asks; this stream's own reconnects
+   * are recognised by its `clientId` and never need it.
+   */
+  takeover?: boolean;
+  /**
+   * Identifies this stream to the server so its own reconnects replace its own dead connection instead
+   * of being refused by it. Default: random per FillStream. 8–64 of [A-Za-z0-9_-].
+   */
+  clientId?: string;
 }
+
+/** close codes the server uses (see the WebSocket section of the API docs) */
+export const CLOSE_SERVICE_RESTART = 1012;
+export const CLOSE_API_SEAT_TAKEN = 4411;
 
 interface Frame { type?: string; session?: string; seq?: number; data?: Fill }
 
@@ -125,6 +152,8 @@ interface Frame { type?: string; session?: string; seq?: number; data?: Fill }
  */
 export class FillStream {
   private readonly opts: Required<Omit<FillStreamOptions, 'store' | 'onEvent' | 'socketFactory' | 'wsOptions'>> & Pick<FillStreamOptions, 'onEvent'>;
+  /** true until the first hello: only the first connection asks to take the stream over */
+  private askTakeover: boolean;
   private readonly store: StateStore;
   private readonly socketFactory: SocketFactory;
   private state: StreamState = { session: null, seq: 0, block: 0, logIndex: 0 };
@@ -146,7 +175,11 @@ export class FillStream {
       seenCapacity: options.seenCapacity ?? 10_000,
       replayWithoutCursor: options.replayWithoutCursor ?? false,
       anchorLagBlocks: options.anchorLagBlocks ?? 200,
+      takeover: options.takeover ?? false,
+      clientId: options.clientId ?? randomBytes(16).toString('base64url'),
     };
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(this.opts.clientId)) throw new Error('clientId must be 8-64 characters of [A-Za-z0-9_-]');
+    this.askTakeover = this.opts.takeover;
     this.store = options.store ?? new MemoryStateStore();
     this.socketFactory = options.socketFactory
       ?? ((url, headers) => new WebSocket(url, { ...options.wsOptions, headers: { ...options.wsOptions?.headers, ...headers } }) as unknown as SocketLike);
@@ -179,25 +212,35 @@ export class FillStream {
   private async loop(): Promise<void> {
     let backoff = this.opts.minBackoffMs;
     while (this.running) {
-      const healthy = await this.connectOnce();
+      const { healthy, code } = await this.connectOnce();
       if (!this.running) break;
+      // the server said it is restarting: its replacement is taking over now, so reconnect at once
+      if (code === CLOSE_SERVICE_RESTART) { backoff = this.opts.minBackoffMs; continue; }
       backoff = healthy ? this.opts.minBackoffMs : Math.min(backoff * 2, this.opts.maxBackoffMs);
       await new Promise<void>((r) => { const t = setTimeout(r, backoff); this.wake = () => { clearTimeout(t); r(); }; });
       this.wake = null;
     }
   }
 
-  /** One connection's life. Resolves when it closes; true when it got as far as a hello. */
-  private connectOnce(): Promise<boolean> {
+  /** the stream URL with this client's identity (and, before the first hello, the takeover request) */
+  private url(): string {
+    const u = new URL(this.opts.client.wsUrl);
+    u.searchParams.set('clientId', this.opts.clientId);
+    if (this.askTakeover) u.searchParams.set('takeover', '1');
+    return u.toString();
+  }
+
+  /** One connection's life. Resolves when it closes: healthy = it got as far as a hello; code = the close code. */
+  private connectOnce(): Promise<{ healthy: boolean; code: number }> {
     return new Promise((resolve) => {
-      const url = this.opts.client.wsUrl;
+      const url = this.url();
       this.emit({ type: 'connecting', url });
       let ws: SocketLike;
       try {
         ws = this.socketFactory(url, { 'x-api-key': this.opts.client.apiKey });
       } catch (e) {
         this.emit({ type: 'error', error: e as Error });
-        resolve(false);
+        resolve({ healthy: false, code: 0 });
         return;
       }
       this.socket = ws;
@@ -247,11 +290,21 @@ export class FillStream {
       ws.on('close', (code, reason) => {
         if (pinger) clearInterval(pinger);
         const why = reason?.toString() ?? '';
-        if (code === 1000 && /replaced/i.test(why)) this.emit({ type: 'replaced' });
         this.emit({ type: 'disconnected', code, reason: why });
+        if (code === 1000 && /replaced/i.test(why) && this.running) {
+          this.running = false;
+          this.emit({ type: 'replaced' });
+          this.emit({ type: 'fatal', error: new Error('another API client of this account took the stream over (takeover); this stream has stopped') });
+        } else if (code === CLOSE_API_SEAT_TAKEN && this.running) {
+          this.running = false;
+          this.emit({ type: 'blocked' });
+          this.emit({ type: 'fatal', error: new Error('another API client of this account already holds the stream (one per account; the first one keeps it). Stop it, or pass takeover: true to replace it') });
+        } else if (code === CLOSE_SERVICE_RESTART) {
+          this.emit({ type: 'restarting' });
+        }
         if (this.socket === ws) this.socket = null;
         // wait for this connection's queued frames before the next connection's hello can run
-        void this.queue.then(() => resolve(conn.greeted && !conn.failed));
+        void this.queue.then(() => resolve({ healthy: conn.greeted && !conn.failed, code }));
       });
     });
   }
@@ -266,6 +319,7 @@ export class FillStream {
       this.state.session = m.session;
       this.state.seq = m.seq ?? 0;
       await this.store.save(this.state);
+      this.askTakeover = false;   // seated: from here on our own clientId is what gets us back in
       this.emit({ type: 'hello', session: m.session, seq: this.state.seq });
       return;
     }
