@@ -20,7 +20,7 @@ npm install pmwallets     # Node.js ≥ 20
 
 | | |
 |---|---|
-| `PmwClient` | 排行榜、实体、地址解锁、我的地址(`myAddresses`)、订阅、成交补发（`fills`、`fillsSince`）、交易历史导出 |
+| `PmwClient` | 排行榜、实体、地址解锁(余额或套餐额度)、我的地址(`myAddresses`)、套餐与余额、订阅、webhook 状态与投递记录、成交补发（`fills`、`fillsSince`）、交易历史导出 |
 | `FillStream` | 自动重连与保活的 WebSocket；按 `session`/`seq` 发现漏帧并从最后送达的成交补发；按 `eventId` 去重；首次启动锚定在链头之后；游标持久化 |
 | `verifyWebhook(rawBody, signature, secret)` | 校验 `x-pmw-signature`（原始 body 的 HMAC-SHA256） |
 

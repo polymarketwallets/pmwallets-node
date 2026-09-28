@@ -83,11 +83,37 @@ export class PmwClient {
   latency(): Promise<Record<string, unknown>> {
     return this.request('GET', '/v1/latency');
   }
+  /** The published statistics windows (e.g. 30d, 7d) and when each was computed. */
+  periods(): Promise<Record<string, unknown>[]> {
+    return this.request('GET', '/v1/periods');
+  }
+
+  // ── account ──────────────────────────────────────────────────────────────
+  /** Your monthly plan (Base / Pro / Max), its period dates and what is used of its allowances. */
+  plan(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/plan');
+  }
+  /** The plans on sale: price and allowances of Base / Pro / Max. */
+  plans(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/plans');
+  }
+  /** Balance and top-up options. */
+  billing(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/billing');
+  }
+  /** One page of the balance statement, newest first; pass the previous page's `next` as `cursor`. */
+  ledger(opts: { limit?: number; cursor?: string } = {}): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/ledger', { query: opts });
+  }
 
   // ── addresses ────────────────────────────────────────────────────────────
   /** Buy the address behind a handle. `maxPriceCents` is a ceiling: the charge never exceeds it. */
-  buyReveal(input: { entityId: string; maxPriceCents: number }): Promise<Record<string, unknown>> {
+  buyReveal(input: { entityId: string; maxPriceCents: number; viaPlan?: boolean }): Promise<Record<string, unknown>> {
     return this.request('POST', '/v1/account/reveals', { body: input });
+  }
+  /** Unlock with your plan's allowance instead of the balance: never charges (409 when the allowance is used up). */
+  unlockWithPlan(entityId: string): Promise<Record<string, unknown>> {
+    return this.buyReveal({ entityId, maxPriceCents: 0, viaPlan: true });
   }
   reveals(): Promise<Record<string, unknown>[]> {
     return this.request('GET', '/v1/account/reveals');
@@ -108,6 +134,24 @@ export class PmwClient {
   /** Charges another hour and resumes from the current head (the paused gap is not backfilled). */
   resumeSubscription(id: string): Promise<Subscription> {
     return this.request('POST', `/v1/account/subscriptions/${encodeURIComponent(id)}/resume`);
+  }
+
+  // ── webhooks ─────────────────────────────────────────────────────────────
+  /** Your webhook endpoint. With an API key the URL comes back as its origin only; adding or removing one needs the website. */
+  webhooks(): Promise<Record<string, unknown>[]> {
+    return this.request('GET', '/v1/account/webhooks');
+  }
+  /** Re-enable an endpoint that was disabled after a day of failures, and resume the subscriptions it paused. */
+  reactivateWebhook(id: string): Promise<Record<string, unknown>> {
+    return this.request('POST', `/v1/account/webhooks/${encodeURIComponent(id)}/reactivate`);
+  }
+  /** One page of delivery attempts (webhook and WebSocket), newest first. */
+  deliveries(opts: { limit?: number; cursor?: string } = {}): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/deliveries', { query: opts });
+  }
+  /** Delivery success and latency over the last `hours`. */
+  deliveryStats(opts: { hours?: number } = {}): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/delivery-stats', { query: opts });
   }
 
   // ── fills ────────────────────────────────────────────────────────────────
@@ -134,6 +178,18 @@ export class PmwClient {
   /** Charges the balance; the price is recomputed server-side. */
   createExport(input: ExportInput): Promise<Record<string, unknown>> {
     return this.request('POST', '/v1/account/exports', { body: input });
+  }
+  /** From a Max plan's monthly allowance: the whole sellable window, nothing charged. */
+  createPlanExport(entityIds: string[]): Promise<Record<string, unknown>> {
+    return this.request('POST', '/v1/account/exports', { body: { entityIds, viaPlan: true } });
+  }
+  /** The days that can be bought right now (a contiguous range ending at the latest published day). */
+  exportWindow(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/exports/window');
+  }
+  /** The per-day prices exports are charged at. */
+  exportRateCard(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/exports/rate-card');
   }
   exports(): Promise<Record<string, unknown>[]> {
     return this.request('GET', '/v1/account/exports');

@@ -43,6 +43,30 @@ describe('PmwClient', () => {
     expect(out.tracked).toBe(2);
   });
 
+  it('maps every account call to its endpoint', async () => {
+    const cases: [(c: PmwClient) => Promise<unknown>, string, string, unknown?][] = [
+      [(c) => c.periods(), 'GET', '/v1/periods'],
+      [(c) => c.plan(), 'GET', '/v1/account/plan'],
+      [(c) => c.plans(), 'GET', '/v1/plans'],
+      [(c) => c.billing(), 'GET', '/v1/account/billing'],
+      [(c) => c.ledger({ limit: 10, cursor: 'x|1' }), 'GET', '/v1/account/ledger?limit=10&cursor=x%7C1'],
+      [(c) => c.unlockWithPlan('H1'), 'POST', '/v1/account/reveals', { entityId: 'H1', maxPriceCents: 0, viaPlan: true }],
+      [(c) => c.createPlanExport(['H1']), 'POST', '/v1/account/exports', { entityIds: ['H1'], viaPlan: true }],
+      [(c) => c.exportWindow(), 'GET', '/v1/account/exports/window'],
+      [(c) => c.exportRateCard(), 'GET', '/v1/exports/rate-card'],
+      [(c) => c.webhooks(), 'GET', '/v1/account/webhooks'],
+      [(c) => c.reactivateWebhook('w 1'), 'POST', '/v1/account/webhooks/w%201/reactivate'],
+      [(c) => c.deliveries({ limit: 5 }), 'GET', '/v1/account/deliveries?limit=5'],
+      [(c) => c.deliveryStats({ hours: 24 }), 'GET', '/v1/account/delivery-stats?hours=24'],
+    ];
+    for (const [call, method, path, body] of cases) {
+      const f = fakeFetch([{}]);
+      await call(new PmwClient({ apiKey: 'k', baseUrl: 'https://api.example.com', fetch: f.fn }));
+      expect(`${f.calls[0]!.init.method} ${f.calls[0]!.url}`).toBe(`${method} https://api.example.com${path}`);
+      if (body !== undefined) expect(JSON.parse(f.calls[0]!.init.body as string)).toEqual(body);
+    }
+  });
+
   it('turns a non-2xx answer into PmwError with the parsed body', async () => {
     const f = fakeFetch([{ statusCode: 402, message: 'insufficient balance' }], 402);
     const c = new PmwClient({ apiKey: 'k', fetch: f.fn });
