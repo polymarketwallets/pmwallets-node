@@ -101,6 +101,23 @@ export interface Leaderboard {
   [k: string]: unknown;
 }
 
+/** one of your addresses (see PmwClient.myAddresses): a board row plus how you hold it */
+export interface MyAddressRow extends LeaderboardRow {
+  /** 'paid' | 'free' | 'plan'; null = a free or plan unlock that lapsed — masked again, `revealCents` quotes it */
+  unlockedBy: 'paid' | 'free' | 'plan' | null;
+  /** set when your push subscription to it is paused, e.g. 'plan_ended', 'insufficient_balance' */
+  pausedReason?: string;
+}
+/** unlocked but no fill in this window, so no figures to rank */
+export interface MyAddressOutside { entityId: string; label: string; revealed: boolean; subscribed: boolean; unlockedBy: MyAddressRow['unlockedBy']; pausedReason?: string }
+export interface MyAddresses extends Leaderboard {
+  /** how many addresses you have unlocked */
+  tracked: number;
+  rows: MyAddressRow[];
+  /** first page only */
+  outside?: MyAddressOutside[];
+}
+
 export interface ExportInput { entityIds: string[]; from: string; to: string }
 /** one daily file an export grants; `path` answers with a redirect to the file (see exportFileUrl) */
 export interface ExportFile { wallet: string; day: string; rows: number; bytes: number; path: string }

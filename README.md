@@ -45,7 +45,7 @@ await stream.start();
 
 | | |
 |---|---|
-| `PmwClient` | leaderboard, entities, address unlocks, subscriptions, fills replay (`fills`, `fillsSince`), trade-history exports |
+| `PmwClient` | leaderboard, entities, address unlocks, your unlocked addresses (`myAddresses`), subscriptions, fills replay (`fills`, `fillsSince`), trade-history exports |
 | `FillStream` | WebSocket with reconnect and keep-alive; detects missed frames by `session`/`seq` and replays them from the last fill delivered; de-duplicates by `eventId`; anchors behind the chain head on first start; persisted cursor |
 | `verifyWebhook(rawBody, signature, secret)` | checks `x-pmw-signature` (HMAC-SHA256 of the raw body) |
 

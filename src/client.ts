@@ -1,4 +1,5 @@
 import type {
+  MyAddresses,
   ExportFile, ExportInput, Fill, FillCursor, FillsPage, Leaderboard, LeaderboardQuery, SubscribeInput, Subscription,
 } from './types.js';
 
@@ -65,6 +66,15 @@ export class PmwClient {
   // ── the board ────────────────────────────────────────────────────────────
   leaderboard(query: LeaderboardQuery = {}): Promise<Leaderboard> {
     return this.request('GET', '/v1/leaderboard', { query });
+  }
+  /**
+   * Every address you have unlocked — bought, taken free, or unlocked with your plan — as board rows, with how
+   * each is held (`unlockedBy`; null = a free or plan unlock that lapsed and is masked again) and a paused push
+   * subscription's `pausedReason`. `outside` (first page only) lists unlocked addresses with no fill in the window.
+   * Spends no board rows.
+   */
+  myAddresses(query: LeaderboardQuery = {}): Promise<MyAddresses> {
+    return this.request('GET', '/v1/leaderboard', { query: { ...query, mine: 1 } });
   }
   /** One entity by handle or address. The full address comes back only for entities you own. */
   entity(id: string, opts: { period?: string } = {}): Promise<Record<string, unknown>> {

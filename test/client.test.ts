@@ -35,6 +35,14 @@ describe('PmwClient', () => {
     expect(f.calls[1]!.url).toContain('sinceBlock=2&sinceLogIndex=0&limit=2');
   });
 
+  it('asks the board for your own addresses', async () => {
+    const f = fakeFetch([{ periodId: '30d', tier: 'free', tracked: 2, rows: [], outside: [] }]);
+    const c = new PmwClient({ apiKey: 'k', baseUrl: 'https://api.example.com', fetch: f.fn });
+    const out = await c.myAddresses({ sort: 'realizedPnl', offset: 15 });
+    expect(f.calls[0]!.url).toBe('https://api.example.com/v1/leaderboard?sort=realizedPnl&offset=15&mine=1');
+    expect(out.tracked).toBe(2);
+  });
+
   it('turns a non-2xx answer into PmwError with the parsed body', async () => {
     const f = fakeFetch([{ statusCode: 402, message: 'insufficient balance' }], 402);
     const c = new PmwClient({ apiKey: 'k', fetch: f.fn });
