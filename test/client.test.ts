@@ -35,6 +35,15 @@ describe('PmwClient', () => {
     expect(f.calls[1]!.url).toContain('sinceBlock=2&sinceLogIndex=0&limit=2');
   });
 
+  it('sends the price bands as one comma-separated value', async () => {
+    const f = fakeFetch([{ periodId: '30d', tier: 'free', tracked: 2, rows: [] }, { periodId: '30d', tier: 'free', tracked: 2, rows: [] }]);
+    const c = new PmwClient({ apiKey: 'k', baseUrl: 'https://api.example.com', fetch: f.fn });
+    await c.leaderboard({ bands: [0, 2], limit: 5 });
+    await c.leaderboard({ bands: '1,3' });
+    expect(f.calls[0]!.url).toBe('https://api.example.com/v1/leaderboard?bands=0%2C2&limit=5');
+    expect(f.calls[1]!.url).toBe('https://api.example.com/v1/leaderboard?bands=1%2C3');
+  });
+
   it('asks the board for your own addresses', async () => {
     const f = fakeFetch([{ periodId: '30d', tier: 'free', tracked: 2, rows: [], outside: [] }]);
     const c = new PmwClient({ apiKey: 'k', baseUrl: 'https://api.example.com', fetch: f.fn });

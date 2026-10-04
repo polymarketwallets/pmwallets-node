@@ -62,11 +62,19 @@ export interface LeaderboardQuery {
   minRoi?: number;
   minWinLo?: number;
   minEligible?: number;
+  /** Floor on markets won or lost (breakevens left out) — the floor the website uses. */
+  minWinsLosses?: number;
+  minFills?: number;
+  minVolume?: number;
   style?: 'maker' | 'taker' | 'two-sided';
   category?: string;
+  /** With `category`: at least this share (0–1] of the entity's traded value was in that category. */
+  minCategoryShare?: number;
   status?: 'active' | 'quiet' | 'dormant';
   maxWallets?: number;
-  [k: string]: string | number | undefined;
+  /** Unlock price bands, any of them: 0 = free … 5 (the ladder is `pricing.bands`). Priced on 30d whatever the period. */
+  bands?: readonly number[] | string;
+  [k: string]: string | number | readonly number[] | undefined;
 }
 
 export interface LeaderboardRow {

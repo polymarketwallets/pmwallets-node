@@ -23,7 +23,8 @@ export interface PmwClientOptions {
   fetch?: typeof fetch;
 }
 
-type Query = Record<string, string | number | boolean | undefined>;
+/** an array goes out as one comma-separated value (`bands=0,2`) */
+type Query = Record<string, string | number | boolean | readonly number[] | undefined>;
 
 /** REST client for https://api.pmwallets.com. Every method authenticates with the API key. */
 export class PmwClient {
@@ -47,7 +48,7 @@ export class PmwClient {
 
   async request<T>(method: string, path: string, opts: { query?: Query; body?: unknown } = {}): Promise<T> {
     const url = new URL(this.baseUrl + path);
-    for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
+    for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) url.searchParams.set(k, Array.isArray(v) ? v.join(',') : String(v));
     const headers: Record<string, string> = { 'x-api-key': this.apiKey, accept: 'application/json' };
     if (opts.body !== undefined) headers['content-type'] = 'application/json';
     const res = await this.fetchImpl(url, {

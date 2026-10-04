@@ -26,6 +26,8 @@ const pmw = new PmwClient({ apiKey: process.env.PMW_API_KEY! });
 
 // who is making money on Polymarket, and how
 const board = await pmw.leaderboard({ minWinLo: 0.55, minEligible: 30, style: 'taker', status: 'active', limit: 50 });
+// only wallets whose address unlocks for free or for the $1 band (0 = free … 5; the ladder is board.pricing.bands)
+const cheap = await pmw.leaderboard({ bands: [0, 1], minWinLo: 0.55 });
 
 // follow one (billed per entity per hour; 402 = balance too low, 409 = dormant)
 await pmw.subscribe({ entityId: board.rows[0].entityId, channels: ['ws'] });
