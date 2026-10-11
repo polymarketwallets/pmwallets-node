@@ -1,6 +1,6 @@
 # pmwallets —— PMWallets Node.js SDK
 
-[![npm](https://img.shields.io/npm/v/pmwallets.svg)](https://www.npmjs.com/package/pmwallets) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/pmwallets.svg)](https://www.npmjs.com/package/pmwallets) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/Xy5uTTb3gN)
 
 [PMWallets](https://pmwallets.com/zh) 官方 Node.js / TypeScript 客户端：从 Polygon 链上计算的 **Polymarket 聪明钱排行榜**，
 以及**你所跟踪的 Polymarket 钱包的实时成交** —— 按顺序、只送一次、漏掉的自动补发。

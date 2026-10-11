@@ -1,6 +1,6 @@
 # pmwallets — Node.js SDK for PMWallets
 
-[![npm](https://img.shields.io/npm/v/pmwallets.svg)](https://www.npmjs.com/package/pmwallets) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/pmwallets.svg)](https://www.npmjs.com/package/pmwallets) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/Xy5uTTb3gN)
 
 Official Node.js / TypeScript client for [PMWallets](https://pmwallets.com): the **Polymarket smart-money
 leaderboard** computed from the Polygon chain, and the **real-time fills of the Polymarket wallets you follow** —
