@@ -1,6 +1,6 @@
 {
   "name": "pmwallets",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Official PMWallets SDK and CLI: Polymarket smart-money leaderboard, real-time wallet fills over WebSocket with gap replay, webhooks, exports — and a CLI + MCP server so AI agents (Claude Code, Codex, Cursor, …) can follow traders and act on their fills.",
   "mcpName": "io.github.polymarketwallets/pmwallets",
   "type": "module",

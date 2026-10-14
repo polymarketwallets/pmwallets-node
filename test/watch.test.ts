@@ -362,6 +362,36 @@ describe('Watcher', () => {
     await until(() => { try { process.kill(orphan.pid!, 0); return false; } catch { return true; } }, 8_000);
   }, 20_000);
 
+  it('also stops a leftover that left the command\'s process group, even when the batch has a process record (Linux)', async () => {
+    if (process.platform !== 'linux') return;
+    const dir = mkdtempSync(join(tmpdir(), 'pmw-watch-'));
+    const batchFile = join(dir, 'running-g.jsonl');
+    writeFileSync(batchFile, `${JSON.stringify({ ...fill(820), source: 'ws' })}\n`);
+    // the recorded group is gone; a process that escaped it (its own session) still runs the batch
+    writeFileSync(join(dir, 'running-g.pid'), JSON.stringify({ pid: 2 ** 22 + 4321, host: hostname(), batchFile }));
+    const escaped = spawn(process.execPath, ['-e', 'setTimeout(()=>{},60000)'], { detached: true, stdio: 'ignore', env: { ...process.env, PMW_BATCH_FILE: batchFile } });
+    await wait(200);
+    const h = setup({ exec: 'node -e ""', dir });
+    await h.w.start();
+    await until(() => { try { process.kill(escaped.pid!, 0); return false; } catch { return true; } });
+  });
+
+  it('when a batch ends, a process that left the command\'s group (setsid) is stopped too (Linux)', async () => {
+    if (process.platform !== 'linux') return;
+    const pidFile = join(mkdtempSync(join(tmpdir(), 'pmw-pid-')), 'escaped.pid');
+    // the command starts a child in its own session and exits at once
+    const cmd = `node -e "const c=require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},60000)'],{detached:true,stdio:'ignore'});require('fs').writeFileSync('${pidFile}',String(c.pid));c.unref()"`;
+    const h = setup({ exec: cmd });
+    await h.w.start();
+    await until(() => h.events.some((e) => e['event'] === 'connected'));
+    h.hello();
+    await until(() => h.events.some((e) => e['event'] === 'hello'));
+    h.push(fill(1001));
+    await until(() => h.events.some((e) => e['event'] === 'batch_done'));
+    const escaped = Number(readFileSync(pidFile, 'utf8'));
+    await until(() => { try { process.kill(escaped, 0); return false; } catch { return true; } });
+  });
+
   it('checks for a leftover command in every mode, not only with --exec', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'pmw-watch-'));
     const stranger = spawn(process.execPath, ['-e', 'setTimeout(()=>{},60000)'], { detached: true, stdio: 'ignore' });

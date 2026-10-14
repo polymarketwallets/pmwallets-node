@@ -341,8 +341,10 @@ export class Watcher {
         this.escalations.clear();
         this.proc = null;
         try { unlinkSync(pidFile); } catch { /* not written */ }
-        // the batch is over when the command exits: anything it left running is stopped with it
+        // the batch is over when the command exits: anything it left running is stopped with it — its process group,
+        // and on Linux any process that left the group but still carries this batch in its environment
         killTree(child, 'SIGKILL');
+        if (process.platform === 'linux') for (const pgid of groupsRunning(resolvePath(file))) killTree({ pid: pgid } as ChildProcess, 'SIGKILL');
         resolve(r);
       };
       const kill = setTimeout(() => {
@@ -380,11 +382,12 @@ export class Watcher {
       await this.stopOrphan(this.path(n));
       try { unlinkSync(this.path(n)); } catch { /* gone */ }
     }
-    // a batch whose command started but whose process record was never written (killed in between): on Linux its
-    // processes are found by the batch path in their environment; elsewhere they cannot be, and it is said so
+    // On Linux every batch's processes are also found by the batch path in their environment — those of a batch
+    // whose process record was never written, and any that left the command's process group (setsid). Elsewhere a
+    // batch without a record cannot be checked, and it is said so.
     for (const n of names.filter((x) => x.startsWith('running-') && x.endsWith('.jsonl'))) {
-      if (names.includes(n.replace(/\.jsonl$/, '.pid'))) continue;
       if (process.platform !== 'linux') {
+        if (names.includes(n.replace(/\.jsonl$/, '.pid'))) continue;
         throw new Error(`a command may have been started for ${this.path(n)} just before the previous watcher died, and it cannot be looked for on this system. `
           + `Make sure no agent from the previous run is still running, then move that file into ${join(this.o.dir, 'failed')} and start again`);
       }
