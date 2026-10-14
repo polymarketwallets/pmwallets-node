@@ -61,6 +61,32 @@ One stream per account:
 
 PMWallets' servers are in the United Kingdom. A consumer that also trades on Polymarket should run from Ireland (AWS eu-west-1): Polymarket does not accept API orders from the UK, the US and several EU countries.
 
+## AI agents: command line and MCP
+
+The package installs a `pmwallets` command that prints JSON — for scripts, and for AI agents (Claude Code, Codex,
+Gemini CLI, Cursor, WorkBuddy, …) that act on the fills of the traders you follow.
+
+```bash
+export PMW_API_KEY=pmw_…
+npx pmwallets leaderboard --minWinLo 0.55 --category politics --limit 20
+npx pmwallets subscribe <handle>          # billed per hour
+npx pmwallets new-fills                   # fills since the previous call, each once (poll it)
+npx pmwallets watch                       # live: one JSON line per fill, with its market and decimal amounts
+npx pmwallets watch --batch-sec 30 --exec 'claude -p "Fills from traders I follow are on stdin. …"'
+npx pmwallets mcp                         # the same as MCP tools
+npx pmwallets skill                       # the guide to give your agent (SKILL.md)
+```
+
+- `watch --exec` runs the command once per batch, the fills on its stdin as JSON lines (and in `$PMW_BATCH_FILE`);
+  fills that arrive while it runs make the next batch. A batch is handed over **at most once**: one whose command
+  fails, times out or is interrupted is kept in `pmw-watch/failed/` and never re-run — the agent may already have
+  placed an order. Restarts resume from where the stream stopped.
+- To trade, give the agent [pmwallets-copytrade](https://github.com/polymarketwallets/polymarket-copy-trading-bot):
+  `order buy <tokenId> --usdc 5 --key <eventId>` (the same key never orders twice), `market`, `balance`, `positions`.
+- MCP config (Claude Desktop, Cursor, …): `{"command": "npx", "args": ["-y", "pmwallets", "mcp"], "env": {"PMW_API_KEY": "pmw_…"}}`.
+- Platforms without a shell (Dify, Coze, n8n, GPT Actions): import [openapi.json](https://pmwallets.com/openapi.json).
+- `HTTPS_PROXY` / `NO_PROXY` are honoured by the command line.
+
 ## Trade-history exports
 
 A purchase is access to files: one zstd-compressed CSV per wallet per UTC day, downloadable at once and again later.

@@ -1,10 +1,13 @@
 {
   "name": "pmwallets",
-  "version": "0.5.1",
-  "description": "Official PMWallets SDK: Polymarket smart-money leaderboard, real-time wallet fills over WebSocket with gap replay, webhooks and exports.",
+  "version": "0.6.0",
+  "description": "Official PMWallets SDK and CLI: Polymarket smart-money leaderboard, real-time wallet fills over WebSocket with gap replay, webhooks, exports — and a CLI + MCP server so AI agents (Claude Code, Codex, Cursor, …) can follow traders and act on their fills.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "pmwallets": "dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,6 +16,7 @@
   },
   "files": [
     "dist",
+    "SKILL.md",
     "README.md",
     "README.zh.md"
   ],
@@ -31,11 +35,17 @@
     "wallet-tracker",
     "smart-money",
     "pmwallets",
-    "prediction-markets"
+    "prediction-markets",
+    "mcp",
+    "ai-agent",
+    "claude-code",
+    "codex"
   ],
   "homepage": "https://pmwallets.com/docs",
   "license": "MIT",
   "dependencies": {
+    "https-proxy-agent": "^7.0.6",
+    "undici": "^6.29.0",
     "ws": "^8.21.3"
   },
   "devDependencies": {

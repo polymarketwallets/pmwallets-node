@@ -4,3 +4,4 @@ dist/
 .env
 config.yaml
 pmw-data/
+pmw-watch/

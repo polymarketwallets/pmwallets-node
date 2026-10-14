@@ -4,3 +4,11 @@ export { FillStream, FileStateStore, MemoryStateStore, CLOSE_SERVICE_RESTART, CL
 export type { FillStreamOptions, FillMeta, StreamEvent, StreamState, StateStore, SocketLike, SocketFactory } from './stream.js';
 export { verifyWebhook } from './webhook.js';
 export * from './types.js';
+export { MarketLookup, microToDecimal } from './market.js';
+export type { MarketInfo, MarketLookupOptions } from './market.js';
+export { Watcher } from './watch.js';
+export type { WatchOptions, WatchedFill } from './watch.js';
+export { serveMcp, MCP_PROTOCOL_VERSIONS } from './mcp.js';
+export type { McpTool, McpServerOptions } from './mcp.js';
+export { pmwalletsTools, describeFill, newFills, CursorFile, MCP_INSTRUCTIONS } from './tools.js';
+export { VERSION } from './version.js';
