@@ -83,21 +83,22 @@ npx pmwallets skill                       # the guide to give your agent (SKILL.
   placed an order. Restarts resume from where the stream stopped.
 - To trade, give the agent [pmwallets-copytrade](https://github.com/polymarketwallets/polymarket-copy-trading-bot):
   `order buy <tokenId> --usdc 5 --key <eventId>` (the same key never orders twice), `market`, `balance`, `positions`.
-- MCP config (Claude Desktop, Cursor, Windsurf, WorkBuddy, …):
-
-  ```json
-  {
-    "mcpServers": {
-      "pmwallets": {
-        "command": "npx",
-        "args": ["-y", "pmwallets", "mcp"],
-        "env": { "PMW_API_KEY": "pmw_..." }
-      }
-    }
-  }
-  ```
 - Platforms without a shell (Dify, Coze, n8n, GPT Actions): import [openapi.json](https://pmwallets.com/openapi.json).
 - `HTTPS_PROXY` / `NO_PROXY` are honoured by the command line.
+
+MCP config (Claude Desktop, Cursor, Windsurf, WorkBuddy, …):
+
+```json
+{
+  "mcpServers": {
+    "pmwallets": {
+      "command": "npx",
+      "args": ["-y", "pmwallets", "mcp"],
+      "env": { "PMW_API_KEY": "pmw_..." }
+    }
+  }
+}
+```
 
 ## Trade-history exports
 
