@@ -164,6 +164,15 @@ describe('new_fills', () => {
     expect(file.load()).toEqual({ sinceBlock: 9600, sinceLogIndex: 0 });
   });
 
+  it('the cursor moves only once the answer is complete (an interrupted market lookup loses nothing)', async () => {
+    const file = new CursorFile(join(mkdtempSync(join(tmpdir(), 'pmw-cur-')), 'c.json'));
+    file.save({ sinceBlock: 3999, sinceLogIndex: 0 });
+    const { c } = fakeClient([row(4000, 1)]);
+    const failing = { byToken: async () => { throw new Error('interrupted'); } } as unknown as MarketLookup;
+    await expect(newFills(c, file, failing, 10)).rejects.toThrow(/interrupted/);
+    expect(file.load()).toEqual({ sinceBlock: 3999, sinceLogIndex: 0 });
+  });
+
   it('every tool tells an agent how to fix a missing API key', async () => {
     const tools = pmwalletsTools(null, { markets: null });
     await expect(tools.find((t) => t.name === 'subscriptions')!.handler({})).rejects.toThrow(/PMW_API_KEY/);

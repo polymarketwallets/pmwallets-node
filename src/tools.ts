@@ -74,15 +74,17 @@ async function newFillsNow(client: PmwClient, cursorFile: CursorFile, markets: M
   const page = await client.fills({ ...cursor, limit: n });
   const last = page.rows[page.rows.length - 1];
   const next = last ? { sinceBlock: last.block, sinceLogIndex: last.logIndex } : cursor;
-  // never move back over what is on disk (this narrows, but does not close, the window for two processes on one file)
-  const onDisk = cursorFile.load();
-  if (!onDisk || after(next, onDisk)) cursorFile.save(next);
-  return {
+  // the answer is complete (markets looked up) before the cursor moves: an interrupted call loses nothing
+  const result = {
     fills: await Promise.all(page.rows.map((f) => describeFill(f, markets))),
     more: page.next !== null,
     subscriptions: page.subscriptions,
     ...(anchored ? { note: 'first call: started about one hour back; later calls continue from here' } : {}),
   };
+  // never move back over what is on disk (this narrows, but does not close, the window for two processes on one file)
+  const onDisk = cursorFile.load();
+  if (!onDisk || after(next, onDisk)) cursorFile.save(next);
+  return result;
 }
 
 const str = (description: string) => ({ type: 'string', description });

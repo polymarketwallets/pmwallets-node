@@ -250,7 +250,13 @@ export class Watcher {
     }
   }
 
+  /** the stream cursor as it is on disk — synced first: the stream writes it without fsync, and ids are forgotten on its word */
   private savedCursor(): { block: number; logIndex: number } | null {
+    try {
+      const fd = openSync(this.path('stream.json'), 'r+'); // r+: Windows cannot fsync a read-only handle
+      try { fsyncSync(fd); } finally { closeSync(fd); }
+      syncDir(this.o.dir);
+    } catch { return null; }
     try {
       const c = JSON.parse(readFileSync(this.path('stream.json'), 'utf8')) as { block?: unknown; logIndex?: unknown };
       return Number.isInteger(c.block) && Number.isInteger(c.logIndex) ? { block: c.block as number, logIndex: c.logIndex as number } : null;
