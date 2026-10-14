@@ -163,6 +163,8 @@ describe('Watcher', () => {
     await s.w.stop();
     // by the time stop() returns: the batch is in failed/, the command tree is gone, and the lock is released
     expect(s.events.find((e) => e['event'] === 'batch_failed')?.['reason']).toMatch(/stopped with the watcher/);
+    // the command is over: no SIGKILL may still be pending for its (soon reusable) process id
+    expect((s.w as unknown as { escalations: Set<unknown> }).escalations.size).toBe(0);
     expect(readdirSync(join(s.dir, 'failed'))).toHaveLength(1);
     expect(readdirSync(s.dir).filter((n) => n.startsWith('running-'))).toEqual([]);
     expect(heldLocks(s.dir)).toEqual([]);
@@ -213,6 +215,11 @@ describe('Watcher', () => {
     const calls = readFileSync(out, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { stdin: string });
     expect(calls.flatMap((c) => c.stdin.trim().split('\n').map((l) => (JSON.parse(l) as Fill).block))).toEqual([1002]);
     expect(readFileSync(join(dir, 'handed.txt'), 'utf8').trim().split('\n')).toContain(fill(1002).eventId);
+    // 1003 was never run, and is kept for the user rather than dropped
+    const unstarted = readdirSync(join(dir, 'failed')).filter((n) => n.startsWith('unstarted-'));
+    expect(unstarted).toHaveLength(1);
+    expect(readFileSync(join(dir, 'failed', unstarted[0]!), 'utf8')).toContain(fill(1003).eventId);
+    expect(h.events.some((e) => e['event'] === 'batch_unstarted')).toBe(true);
   });
 
   it('takes over a lock left by a dead process with the next generation; two starters cannot both get it', async () => {

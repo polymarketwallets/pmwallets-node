@@ -76,6 +76,8 @@ export class Watcher {
   private starting: Promise<void> | null = null;
   /** the command running now: stop() ends it (its whole process tree) before letting go of the directory */
   private proc: ChildProcess | null = null;
+  /** pending SIGKILLs for the running command: cancelled when it is over, or they could hit a reused process id */
+  private readonly escalations = new Set<NodeJS.Timeout>();
   private running = false;
   /** the lock file this process created, if it holds the directory */
   private lockFile: string | null = null;
@@ -153,7 +155,7 @@ export class Watcher {
       const proc = this.proc;
       killTree(proc, 'SIGTERM');
       // a command that ignores SIGTERM must not hold the directory (and maybe go on trading) until its timeout
-      setTimeout(() => killTree(proc, 'SIGKILL'), 5_000).unref();
+      this.escalate(proc);
     }
     // a start still in progress sees the stop at its next step and cleans up after itself
     await this.starting?.catch(() => {});
@@ -312,6 +314,8 @@ export class Watcher {
         if (settled) return;
         settled = true;
         clearTimeout(kill);
+        for (const t of this.escalations) clearTimeout(t);
+        this.escalations.clear();
         this.proc = null;
         try { unlinkSync(pidFile); } catch { /* not written */ }
         // the batch is over when the command exits: anything it left running is stopped with it
@@ -321,7 +325,7 @@ export class Watcher {
       const kill = setTimeout(() => {
         timedOut = true;
         killTree(child, 'SIGTERM');
-        setTimeout(() => killTree(child, 'SIGKILL'), 5_000).unref();
+        this.escalate(child);
       }, this.o.execTimeoutMs);
       child.on('error', (e) => finish({ ok: false, reason: `could not start the command: ${e.message}` }));
       // unrecorded, a command could outlive a crash of this process unseen by the next start: do not let it run
@@ -368,10 +372,25 @@ export class Watcher {
     }
   }
 
+  /** SIGKILL the command's tree in 5 s unless it is over by then */
+  private escalate(proc: ChildProcess): void {
+    const t = setTimeout(() => { this.escalations.delete(t); killTree(proc, 'SIGKILL'); }, 5_000);
+    t.unref();
+    this.escalations.add(t);
+  }
+
   private recover(): void {
     const names = readdirSync(this.o.dir).sort();
     const batches = names.filter((x) => x.startsWith('batch-'));
-    const back = batches.flatMap((n) => readLines(this.path(n)));
+    const lines = batches.flatMap((n) => readLines(this.path(n)));
+    // recorded as handed but never started (the process died in between): never run, but never silently dropped
+    const unstarted = lines.filter((l) => this.handed.has(eventIdOf(l)));
+    const back = lines.filter((l) => !this.handed.has(eventIdOf(l)));
+    if (unstarted.length) {
+      const to = join(this.o.dir, 'failed', `unstarted-${new Date(this.now()).toISOString().replace(/[:.]/g, '-')}.jsonl`);
+      writeSynced(to, `${dedupe(unstarted).join('\n')}\n`);
+      this.log({ event: 'batch_unstarted', fills: unstarted.length, file: to, note: 'recorded as handed to the command, but the watcher stopped before running it: it is not run — check these fills yourself' });
+    }
     if (back.length) {
       // the merged queue is on disk before any batch file goes: a crash in between only repeats this step
       writeSynced(this.path(QUEUE), `${dedupe([...back, ...readLines(this.path(QUEUE))]).join('\n')}\n`);
