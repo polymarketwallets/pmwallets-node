@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve as resolvePath } from 'node:path';
 import type { PmwClient } from './client.js';
 import { MarketLookup, microToDecimal } from './market.js';
 import type { McpTool } from './mcp.js';
@@ -52,11 +52,13 @@ const cursorQueues = new Map<string, Promise<unknown>>();
 
 /** Every fill after `cursor` up to `limit`, and where the next call should start. */
 export function newFills(client: PmwClient, cursorFile: CursorFile, markets: MarketLookup | null, limit = 100): Promise<Record<string, unknown>> {
-  const prev = cursorQueues.get(cursorFile.path) ?? Promise.resolve();
+  // one key per file, however its path is written
+  const key = resolvePath(cursorFile.path);
+  const prev = cursorQueues.get(key) ?? Promise.resolve();
   const run = prev.then(() => newFillsNow(client, cursorFile, markets, limit), () => newFillsNow(client, cursorFile, markets, limit));
   const settled = run.then(() => undefined, () => undefined);
-  cursorQueues.set(cursorFile.path, settled);
-  void settled.then(() => { if (cursorQueues.get(cursorFile.path) === settled) cursorQueues.delete(cursorFile.path); });
+  cursorQueues.set(key, settled);
+  void settled.then(() => { if (cursorQueues.get(key) === settled) cursorQueues.delete(key); });
   return run;
 }
 

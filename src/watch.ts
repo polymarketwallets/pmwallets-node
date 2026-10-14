@@ -222,7 +222,24 @@ export class Watcher {
     return dedupe(readLines(this.path(QUEUE))).filter((l) => !this.handed.has(eventIdOf(l)));
   }
 
+  /**
+   * A crash in the middle of an append can leave a last line without its newline. That fill was never confirmed (the
+   * stream cursor did not move past it, so the stream sends it again), but the next append would be glued onto the
+   * fragment and lost with it: cut the fragment off first.
+   */
+  private repairTail(name: string): void {
+    const path = this.path(name);
+    let text: string;
+    try { text = readFileSync(path, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return; throw e; }
+    if (!text || text.endsWith('\n')) return;
+    const keep = text.slice(0, text.lastIndexOf('\n') + 1);
+    writeSynced(path, keep);
+    this.log({ event: 'partial_line_removed', file: path, bytes: Buffer.byteLength(text) - Buffer.byteLength(keep) });
+  }
+
   private loadHanded(): void {
+    this.repairTail(HANDED);
+    this.repairTail(QUEUE);
     const ids = readLines(this.path(HANDED));
     for (const id of ids) this.handed.add(id);
     this.handedLines = ids.length;

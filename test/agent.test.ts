@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { parseArgs } from '../src/args.js';
@@ -171,6 +171,16 @@ describe('new_fills', () => {
     const failing = { byToken: async () => { throw new Error('interrupted'); } } as unknown as MarketLookup;
     await expect(newFills(c, file, failing, 10)).rejects.toThrow(/interrupted/);
     expect(file.load()).toEqual({ sinceBlock: 3999, sinceLogIndex: 0 });
+  });
+
+  it('one file reached by two spellings of its path is still one queue', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pmw-cur-'));
+    const abs = join(dir, 'c.json');
+    const rel = relative(process.cwd(), abs);
+    new CursorFile(abs).save({ sinceBlock: 3999, sinceLogIndex: 0 });
+    const { c } = fakeClient([row(4000, 1), row(4000, 2), row(4001, 0), row(4002, 0)]);
+    const [a, b] = await Promise.all([newFills(c, new CursorFile(abs), null, 2), newFills(c, new CursorFile(rel), null, 2)]) as { fills: { eventId: string }[] }[];
+    expect(new Set([...a!.fills, ...b!.fills].map((f) => f.eventId)).size).toBe(4);
   });
 
   it('every tool tells an agent how to fix a missing API key', async () => {

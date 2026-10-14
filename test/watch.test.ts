@@ -279,6 +279,24 @@ describe('Watcher', () => {
     process.kill(-stranger.pid!, 'SIGKILL');
   });
 
+  it('a half-written last line (crash mid-append) is cut off, so the replayed fill is not glued onto it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pmw-watch-'));
+    const whole = JSON.stringify({ ...fill(950), source: 'ws' });
+    writeFileSync(join(dir, 'queue.jsonl'), `${whole}\n${JSON.stringify({ ...fill(951), source: 'ws' }).slice(0, 40)}`);
+    const out = join(mkdtempSync(join(tmpdir(), 'pmw-out-')), 'calls.jsonl');
+    process.env['OUT'] = out;
+    const h = setup({ exec: RECORD, dir, batchMs: 300 });
+    await h.w.start();
+    expect(h.events.some((e) => e['event'] === 'partial_line_removed')).toBe(true);
+    await until(() => h.events.some((e) => e['event'] === 'connected'));
+    h.hello();
+    await until(() => h.events.some((e) => e['event'] === 'hello'));
+    h.push(fill(951)); // the stream sends the unconfirmed fill again
+    await until(() => h.events.some((e) => e['event'] === 'batch_done'));
+    const sent = readFileSync(out, 'utf8').trim().split('\n').flatMap((l) => (JSON.parse(l) as { stdin: string }).stdin.trim().split('\n').map((x) => (JSON.parse(x) as Fill).block));
+    expect(sent).toEqual([950, 951]);
+  });
+
   it('forgets handed fills only at or before the saved stream cursor', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'pmw-watch-'));
     const old = Array.from({ length: 40_001 }, (_, i) => fill(100 + i).eventId);
