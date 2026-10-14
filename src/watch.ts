@@ -554,8 +554,15 @@ function readLines(path: string): string[] {
 }
 
 function appendSynced(path: string, text: string): void {
-  const fd = openSync(path, 'a');
+  // a file this creates is not durable until its directory entry is: sync that too, before returning
+  let fd: number;
+  let created = false;
+  try { fd = openSync(path, 'wx'); created = true; } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    fd = openSync(path, 'a');
+  }
   try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
+  if (created) syncDir(dirname(path));
 }
 
 /** replace a file atomically and durably: temp file, sync, rename, sync the directory */
