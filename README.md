@@ -17,6 +17,16 @@ npm install pmwallets     # Node.js ≥ 20
 
 Create an API key on [pmwallets.com/keys](https://pmwallets.com/keys).
 
+## Signals and radar (Pro and Max)
+
+```ts
+const { entries } = await pmw.signals({ category: 'sports' });
+const big = await pmw.radar({ minUsd: 25000, smart: true });
+await pmw.saveSignalRule('signal', { enabled: true, scope: 'official', minWallets: 3, windowMin: 30, minUsd: 5000, channels: ['ws', 'webhook'] });
+```
+
+Live alerts arrive on `wss://api.pmwallets.com/v1/signals/ws` as `{type: 'signal' | 'radar', data}`. Amounts keep two significant figures, times the minute, and traders are named by handle.
+
 ## Usage
 
 ```ts

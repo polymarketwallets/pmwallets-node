@@ -16,6 +16,16 @@ npm install pmwallets     # Node.js ≥ 20
 
 在 [pmwallets.com/keys](https://pmwallets.com/keys) 创建 API key。用法示例见 [README.md](README.md#usage)。
 
+## 信号与雷达(Pro 和 Max)
+
+```ts
+const { entries } = await pmw.signals({ category: 'sports' });
+const big = await pmw.radar({ minUsd: 25000, smart: true });
+await pmw.saveSignalRule('signal', { enabled: true, scope: 'official', minWallets: 3, windowMin: 30, minUsd: 5000, channels: ['ws', 'webhook'] });
+```
+
+实时告警走 `wss://api.pmwallets.com/v1/signals/ws`,帧为 `{type: 'signal' | 'radar', data}`。金额保留两位有效数字,时间到分钟,交易者只给代号。
+
 ## 包含什么
 
 | | |

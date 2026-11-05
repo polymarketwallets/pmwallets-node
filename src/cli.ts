@@ -30,7 +30,9 @@ Set PMW_API_KEY (create one on https://pmwallets.com/keys). Every command prints
   pmwallets fills --since-block <n> [--since-log-index <n>] [--limit 100]
   pmwallets market <tokenId>               the Polymarket question and outcome of a token
   pmwallets account                        plan and balance
-  pmwallets mcp                            MCP server on stdio (tools: leaderboard, entity, subscribe, new_fills, …)
+  pmwallets signals [--source mine] [--category sports] [--q fed]   smart-money signals (Pro and Max)
+  pmwallets radar [--minUsd 25000] [--side BUY] [--smart]           large fills, whole market (Pro and Max)
+  pmwallets mcp                            MCP server on stdio (tools: leaderboard, signals, radar, entity, subscribe, new_fills, …)
   pmwallets skill                          print the guide for AI agents (SKILL.md)
 
 Placing orders: pmwallets-copytrade (npm i -g pmwallets-copytrade), commands order / positions / balance.
@@ -90,6 +92,13 @@ async function main(argv: string[]): Promise<number> {
       const query: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(flags)) if (v !== true) query[k] = v;
       await call('leaderboard', query);
+      return 0;
+    }
+    case 'signals':
+    case 'radar': {
+      const query: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(flags)) query[k] = k === 'minUsd' ? Number(v) : v;
+      await call(cmd, query);
       return 0;
     }
     case 'entity': await call('entity', { id: pos[0], ...(typeof flags['period'] === 'string' ? { period: flags['period'] } : {}) }); return 0;

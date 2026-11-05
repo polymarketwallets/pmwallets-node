@@ -140,6 +140,18 @@ export function pmwalletsTools(client: PmwClient | null, opts: { markets?: Marke
       handler: async (a) => need().leaderboard(a as never),
     },
     {
+      name: 'signals',
+      description: 'Markets where several smart-money wallets bought one side in a short time (Pro and Max plans). Amounts are rounded, wallets are named by handle.',
+      inputSchema: obj({ source: str('"official" (default) or "mine"'), category: str('market category'), q: str('words in the market title') }),
+      handler: async (a) => need().signals(a as never),
+    },
+    {
+      name: 'radar',
+      description: 'Large taker fills across the whole market (Pro and Max plans). Amounts are rounded, the trader is a handle and a PnL band.',
+      inputSchema: obj({ minUsd: { type: 'number', description: '5000, 10000, 25000, 50000, 100000, 250000 or 1000000' }, side: str('"BUY" or "SELL"'), smart: { type: 'boolean', description: 'official smart money only' }, category: str('market category'), q: str('words in the market title') }),
+      handler: async (a) => need().radar(a as never),
+    },
+    {
       name: 'entity',
       description: 'One trader\'s statistics by handle or address (full address only once unlocked).',
       inputSchema: obj({ id: str('12-character handle or 0x address'), period: str('"30d" or "7d"') }, ['id']),

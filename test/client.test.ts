@@ -14,6 +14,17 @@ function fakeFetch(pages: unknown[], status = 200) {
 }
 
 describe('PmwClient', () => {
+  it('reads signals and the radar, and edits wallet groups', async () => {
+    const f = fakeFetch([{ entries: [] }, { entries: [] }, { added: 2 }]);
+    const c = new PmwClient({ apiKey: 'pmw_a_b', baseUrl: 'https://api.example.com/', fetch: f.fn });
+    await c.signals({ source: 'mine', category: 'sports' });
+    await c.radar({ minUsd: 25000, smart: true });
+    await c.quickAddWallets('g1', { count: 20, category: 'sports' });
+    expect(f.calls[0]!.url).toContain('/v1/signals?source=mine&category=sports');
+    expect(f.calls[1]!.url).toContain('/v1/radar?minUsd=25000&smart=1');
+    expect(f.calls[2]!.url).toContain('/v1/account/wallet-groups/g1/quick-add');
+    expect(f.calls[2]!.init.method).toBe('POST');
+  });
   it('sends the key, builds the query and derives the ws url', async () => {
     const f = fakeFetch([{ rows: [], next: null, subscriptions: 0 }]);
     const c = new PmwClient({ apiKey: 'pmw_a_b', baseUrl: 'https://api.example.com/', fetch: f.fn });

@@ -45,6 +45,8 @@ export class PmwClient {
   get wsUrl(): string {
     return `${this.baseUrl.replace(/^http/, 'ws')}/v1/ws`;
   }
+  /** Where the alerts of your signal and radar rules arrive, as `{type: 'signal' | 'radar', data}`. */
+  get signalsWsUrl(): string { return this.wsUrl.replace(/\/v1\/ws$/, '/v1/signals/ws'); }
 
   async request<T>(method: string, path: string, opts: { query?: Query; body?: unknown } = {}): Promise<T> {
     const url = new URL(this.baseUrl + path);
@@ -135,6 +137,42 @@ export class PmwClient {
   /** Charges another hour and resumes from the current head (the paused gap is not backfilled). */
   resumeSubscription(id: string): Promise<Subscription> {
     return this.request('POST', `/v1/account/subscriptions/${encodeURIComponent(id)}/resume`);
+  }
+
+  // ── signals and radar (Pro and Max) ──────────────────────────
+  /** Markets where several smart-money wallets bought one side. `source: 'mine'` lists what your own rule fired. */
+  signals(opts: { source?: 'official' | 'mine'; category?: string; q?: string; limit?: number; offset?: number } = {}): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/signals', { query: opts });
+  }
+  /** Large taker fills across the whole market. `minUsd` is one of 5000, 10000, 25000, 50000, 100000, 250000, 1000000. */
+  radar(opts: { minUsd?: number; side?: 'BUY' | 'SELL'; smart?: boolean; minPnlUsd?: number; category?: string; q?: string; limit?: number; offset?: number } = {}): Promise<Record<string, unknown>> {
+    const { smart, ...rest } = opts;
+    return this.request('GET', '/v1/radar', { query: { ...rest, ...(smart ? { smart: '1' } : {}) } });
+  }
+  /** Your access level and both push rules. */
+  signalRules(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/signal-rules');
+  }
+  /** Set a push rule; delivered over `signalsWsUrl` and your webhook. */
+  saveSignalRule(kind: 'signal' | 'radar', rule: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request('PUT', `/v1/account/signal-rules/${kind}`, { body: rule });
+  }
+  walletGroups(): Promise<Record<string, unknown>[]> {
+    return this.request('GET', '/v1/account/wallet-groups');
+  }
+  createWalletGroup(name: string): Promise<Record<string, unknown>> {
+    return this.request('POST', '/v1/account/wallet-groups', { body: { name } });
+  }
+  /** Rename a group, or add and remove wallets: handles, or addresses you paid to unlock. */
+  editWalletGroup(id: string, change: { name?: string; add?: string[]; remove?: string[] }): Promise<Record<string, unknown>> {
+    return this.request('PATCH', `/v1/account/wallet-groups/${encodeURIComponent(id)}`, { body: change });
+  }
+  /** Fill a group with the board's best traders matching the filters; `count` is 10, 20, 50 or 100. */
+  quickAddWallets(id: string, filters: Record<string, unknown> & { count: number }): Promise<Record<string, unknown>> {
+    return this.request('POST', `/v1/account/wallet-groups/${encodeURIComponent(id)}/quick-add`, { body: filters });
+  }
+  deleteWalletGroup(id: string): Promise<unknown> {
+    return this.request('DELETE', `/v1/account/wallet-groups/${encodeURIComponent(id)}`);
   }
 
   // ── webhooks ─────────────────────────────────────────────────────────────
