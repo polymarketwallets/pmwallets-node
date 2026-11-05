@@ -141,7 +141,7 @@ export class PmwClient {
 
   // ── signals and radar (Pro and Max) ──────────────────────────
   /** Markets where several smart-money wallets bought one side. `source: 'mine'` lists what your own rule fired. */
-  signals(opts: { source?: 'official' | 'mine'; category?: string; q?: string; limit?: number; offset?: number } = {}): Promise<Record<string, unknown>> {
+  signals(opts: { source?: 'official' | 'mine'; category?: string; q?: string; ids?: string; limit?: number; offset?: number } = {}): Promise<Record<string, unknown>> {
     return this.request('GET', '/v1/signals', { query: opts });
   }
   /** Large taker fills across the whole market. `minUsd` is one of 5000, 10000, 25000, 50000, 100000, 250000, 1000000. */

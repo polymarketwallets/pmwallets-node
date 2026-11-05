@@ -24,7 +24,7 @@ const big = await pmw.radar({ minUsd: 25000, smart: true });
 await pmw.saveSignalRule('signal', { enabled: true, scope: 'official', minWallets: 3, windowMin: 30, minUsd: 5000, channels: ['ws', 'webhook'] });
 ```
 
-实时告警走 `wss://api.pmwallets.com/v1/signals/ws`,帧为 `{type: 'signal' | 'radar', data}`。金额保留两位有效数字,时间到分钟,交易者只给代号。
+实时告警用 `new SignalStream({ client: pmw, onAlert: (a) => … }).start()`,或命令行 `pmwallets alerts`。金额保留两位有效数字,时间到分钟,交易者只给代号。
 
 ## 包含什么
 

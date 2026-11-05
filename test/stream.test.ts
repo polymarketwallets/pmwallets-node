@@ -1,9 +1,10 @@
+import { SignalStream } from '../src/signal-stream.js';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FileStateStore, FillStream, MemoryStateStore, type SocketLike, type StreamEvent } from '../src/stream.js';
-import type { PmwClient } from '../src/client.js';
+import { PmwClient } from '../src/client.js';
 import type { Fill, FillCursor } from '../src/types.js';
 
 const fill = (block: number, logIndex: number): Fill => ({
@@ -227,5 +228,42 @@ describe('FileStateStore', () => {
     await store.save({ session: 's', seq: 3, block: 9, logIndex: 2 });
     expect(await store.load()).toEqual({ session: 's', seq: 3, block: 9, logIndex: 2 });
     expect(JSON.parse(await readFile(store.path, 'utf8')).block).toBe(9);
+  });
+});
+
+describe('SignalStream', () => {
+  class Sock { h: Record<string, (...a: any[]) => void> = {}; on(e: string, cb: (...a: any[]) => void) { this.h[e] = cb; return this; } close() {} }
+  const setup = () => {
+    const socks: Sock[] = []; const urls: string[] = []; const seen: unknown[] = []; const events: any[] = [];
+    const client = new PmwClient({ apiKey: 'pmw_a_b', baseUrl: 'https://api.example.com' });
+    const s = new SignalStream({ client, onAlert: (a) => seen.push(a), onEvent: (e) => events.push(e), maxBackoffMs: 1, socketFactory: (url) => { urls.push(url); const k = new Sock(); socks.push(k); return k as never; } });
+    return { s, socks, urls, seen, events };
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 1100));
+  it('delivers alerts and ignores everything else', () => {
+    const h = setup(); h.s.start();
+    h.socks[0]!.h['message']!(JSON.stringify({ type: 'hello' }));
+    h.socks[0]!.h['message']!('not json');
+    h.socks[0]!.h['message']!(JSON.stringify({ type: 'radar', data: { usd: 52000 } }));
+    expect(h.urls[0]).toBe('wss://api.example.com/v1/signals/ws');
+    expect(h.seen).toEqual([{ type: 'radar', data: { usd: 52000 } }]);
+    h.s.stop();
+  });
+  it('reconnects after a drop, and not after being replaced', async () => {
+    const h = setup(); h.s.start();
+    h.socks[0]!.h['close']!(1006, Buffer.from(''));
+    await tick();
+    expect(h.socks).toHaveLength(2);
+    h.socks[1]!.h['close']!(4412, Buffer.from(''));
+    await tick();
+    expect(h.socks).toHaveLength(2);
+    expect(h.events.at(-1)).toMatchObject({ type: 'stopped' });
+  });
+  it('a plan without signals stops for good', async () => {
+    const h = setup(); h.s.start();
+    h.socks[0]!.h['unexpected-response']!({}, { statusCode: 403 });
+    h.socks[0]!.h['close']!(1006, Buffer.from(''));
+    await tick();
+    expect(h.socks).toHaveLength(1);
   });
 });

@@ -2,6 +2,8 @@ export { PmwClient, PmwError, DEFAULT_BASE_URL } from './client.js';
 export type { PmwClientOptions } from './client.js';
 export { FillStream, FileStateStore, MemoryStateStore, CLOSE_SERVICE_RESTART, CLOSE_API_SEAT_TAKEN } from './stream.js';
 export type { FillStreamOptions, FillMeta, StreamEvent, StreamState, StateStore, SocketLike, SocketFactory } from './stream.js';
+export { SignalStream, CLOSE_SIGNALS_REPLACED } from './signal-stream.js';
+export type { SignalAlert, SignalStreamOptions } from './signal-stream.js';
 export { verifyWebhook } from './webhook.js';
 export * from './types.js';
 export { MarketLookup, microToDecimal } from './market.js';

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { SignalStream } from './signal-stream.js';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,7 @@ Set PMW_API_KEY (create one on https://pmwallets.com/keys). Every command prints
   pmwallets account                        plan and balance
   pmwallets signals [--source mine] [--category sports] [--q fed]   smart-money signals (Pro and Max)
   pmwallets radar [--minUsd 25000] [--side BUY] [--smart]           large fills, whole market (Pro and Max)
+  pmwallets alerts                         live alerts of your rules, one JSON line each (Pro and Max)
   pmwallets mcp                            MCP server on stdio (tools: leaderboard, signals, radar, entity, subscribe, new_fills, …)
   pmwallets skill                          print the guide for AI agents (SKILL.md)
 
@@ -94,6 +96,15 @@ async function main(argv: string[]): Promise<number> {
       await call('leaderboard', query);
       return 0;
     }
+    case 'alerts':
+      await new Promise<void>((done) => {
+        const c = client();
+        if (!c) throw new Error('set PMW_API_KEY (create a key on https://pmwallets.com/keys)');
+        const s = new SignalStream({ client: c, onAlert: (a) => print(a), onEvent: (e) => { if (e.type === 'stopped') { console.error(e.reason); done(); } } });
+        process.once('SIGINT', () => { s.stop(); done(); });
+        s.start();
+      });
+      return 0;
     case 'signals':
     case 'radar': {
       const query: Record<string, unknown> = {};
