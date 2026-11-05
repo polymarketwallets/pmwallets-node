@@ -14,6 +14,33 @@ function fakeFetch(pages: unknown[], status = 200) {
 }
 
 describe('PmwClient', () => {
+  it('buys a plan with the caller\'s ceiling and idempotency key, and sends nothing else', async () => {
+    const f = fakeFetch([{ tier: 'pro' }, { kind: 'upgrade' }]);
+    const c = new PmwClient({ apiKey: 'pmw_a_b', baseUrl: 'https://api.example.com/', fetch: f.fn });
+    await c.buyPlan({ tier: 'pro', maxCents: 1499, requestId: 'r-1', extra: 1 } as never);
+    await c.quotePlanChange('max');
+    expect(f.calls[0]!.url).toBe('https://api.example.com/v1/account/plan/balance');
+    expect(f.calls[0]!.init.method).toBe('POST');
+    expect(JSON.parse(String(f.calls[0]!.init.body))).toEqual({ tier: 'pro', maxCents: 1499, requestId: 'r-1' });
+    expect(f.calls[1]!.url).toContain('/v1/account/plan/quote');
+    expect(JSON.parse(String(f.calls[1]!.init.body))).toEqual({ tier: 'max' });
+  });
+  it('reads the remaining endpoints', async () => {
+    const f = fakeFetch([{}, {}, {}, {}, {}, {}, {}, {}]);
+    const c = new PmwClient({ apiKey: 'pmw_a_b', baseUrl: 'https://api.example.com/', fetch: f.fn });
+    await c.me(); await c.markets(); await c.invite(); await c.invitees({ limit: 5 }); await c.bindInviteCode('ABC');
+    await c.followedWalletGroup(); await c.latencyShape({ hours: 24 }); await c.latencyIncidents();
+    expect(f.calls.map((x) => `${x.init.method} ${new URL(x.url).pathname}${new URL(x.url).search}`)).toEqual([
+      'GET /v1/auth/me', 'GET /v1/markets', 'GET /v1/account/invite', 'GET /v1/account/invite/invitees?limit=5', 'POST /v1/account/invite/bind',
+      'GET /v1/account/wallet-groups/subscriptions', 'GET /v1/latency/shape?hours=24', 'GET /v1/latency/incidents',
+    ]);
+  });
+  it('ready answers on 503 and still throws on anything else', async () => {
+    const down = fakeFetch([{ ok: false, problems: [{ component: 'push' }] }], 503);
+    expect(await new PmwClient({ apiKey: 'pmw_a_b', fetch: down.fn }).ready()).toEqual({ ok: false, problems: [{ component: 'push' }] });
+    const broken = fakeFetch([{ error: 'x' }], 500);
+    await expect(new PmwClient({ apiKey: 'pmw_a_b', fetch: broken.fn }).ready()).rejects.toBeInstanceOf(PmwError);
+  });
   it('reads signals and the radar, and edits wallet groups', async () => {
     const f = fakeFetch([{ entries: [] }, { entries: [] }, { added: 2 }]);
     const c = new PmwClient({ apiKey: 'pmw_a_b', baseUrl: 'https://api.example.com/', fetch: f.fn });

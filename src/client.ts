@@ -83,6 +83,27 @@ export class PmwClient {
   entity(id: string, opts: { period?: string } = {}): Promise<Record<string, unknown>> {
     return this.request('GET', `/v1/entities/${encodeURIComponent(id)}`, { query: opts });
   }
+  /** The busiest markets of the 30d window, with counts and sums over traders. */
+  markets(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/markets');
+  }
+  /** Whether ingest, push, the board, exports and smart-money files are current. A 503 is an answer here, so it returns the body instead of throwing. */
+  async ready(): Promise<Record<string, unknown>> {
+    try {
+      return await this.request('GET', '/v1/ready');
+    } catch (e) {
+      if (e instanceof PmwError && e.status === 503 && typeof e.body === 'object' && e.body !== null) return e.body as Record<string, unknown>;
+      throw e;
+    }
+  }
+  /** Push latency over time and its histogram. `hours` is 1, 24, 168 or 720. */
+  latencyShape(opts: { hours?: number } = {}): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/latency/shape', { query: opts });
+  }
+  /** Stretches of the last 30 days where the push median exceeded the threshold. */
+  latencyIncidents(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/latency/incidents');
+  }
   latency(): Promise<Record<string, unknown>> {
     return this.request('GET', '/v1/latency');
   }
@@ -95,6 +116,35 @@ export class PmwClient {
   /** Your monthly plan (Base / Pro / Max), its period dates and what is used of its allowances. */
   plan(): Promise<Record<string, unknown>> {
     return this.request('GET', '/v1/account/plan');
+  }
+  /** What moving to `tier` would do today. Charges nothing. */
+  quotePlanChange(tier: 'base' | 'pro' | 'max'): Promise<Record<string, unknown>> {
+    return this.request('POST', '/v1/account/plan/quote', { body: { tier } });
+  }
+  /**
+   * Charges the balance for 30 days of a plan, which never renew by themselves. `maxCents` is a ceiling: the
+   * charge never exceeds it. `requestId` is your idempotency key: keep it across retries of one purchase, or a
+   * retry buys a second period; use a new one for a new purchase. Refused while a card plan is active.
+   */
+  buyPlan(input: { tier: 'base' | 'pro' | 'max'; maxCents: number; requestId: string }): Promise<Record<string, unknown>> {
+    const { tier, maxCents, requestId } = input;
+    return this.request('POST', '/v1/account/plan/balance', { body: { tier, maxCents, requestId } });
+  }
+  /** The account behind this key. Use it to check that a key works. */
+  me(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/auth/me');
+  }
+  /** Your invite code, the campaign terms, your commission and how many people you invited. */
+  invite(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/invite');
+  }
+  /** One page of the people you invited; pass the previous page's `next` as `cursor`. */
+  invitees(opts: { limit?: number; cursor?: string } = {}): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/invite/invitees', { query: opts });
+  }
+  /** Bind an invite code to your account, once ever. Credits a non-refundable bonus while the campaign runs. */
+  bindInviteCode(code: string): Promise<Record<string, unknown>> {
+    return this.request('POST', '/v1/account/invite/bind', { body: { code } });
   }
   /** The plans on sale: price and allowances of Base / Pro / Max. */
   plans(): Promise<Record<string, unknown>> {
@@ -159,6 +209,10 @@ export class PmwClient {
   }
   walletGroups(): Promise<Record<string, unknown>[]> {
     return this.request('GET', '/v1/account/wallet-groups');
+  }
+  /** The wallets you follow, as a group that keeps itself up to date. */
+  followedWalletGroup(): Promise<Record<string, unknown>> {
+    return this.request('GET', '/v1/account/wallet-groups/subscriptions');
   }
   createWalletGroup(name: string): Promise<Record<string, unknown>> {
     return this.request('POST', '/v1/account/wallet-groups', { body: { name } });
