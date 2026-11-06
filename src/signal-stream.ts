@@ -13,6 +13,8 @@ export interface SignalStreamOptions {
   /** connected, disconnected, or stopped for good (replaced, or a plan without signals) */
   onEvent?: (e: { type: 'connected' } | { type: 'disconnected'; code: number } | { type: 'stopped'; reason: string }) => void;
   wsOptions?: ClientOptions;
+  /** how often to check the connection is alive; default 20 s */
+  pingIntervalMs?: number;
   /** @internal tests */
   socketFactory?: SocketFactory;
   /** @internal tests */
@@ -24,6 +26,7 @@ export class SignalStream {
   private stopped = false;
   private ws: ReturnType<SocketFactory> | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private pinger: NodeJS.Timeout | null = null;
   private backoff = 1000;
   constructor(private readonly o: SignalStreamOptions) {}
 
@@ -31,6 +34,7 @@ export class SignalStream {
   stop(): void {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
+    if (this.pinger) clearInterval(this.pinger);
     this.ws?.close(1000);
   }
 
@@ -42,7 +46,18 @@ export class SignalStream {
       ?? ((url, headers) => new WebSocket(url, { ...this.o.wsOptions, headers: { ...this.o.wsOptions?.headers, ...headers } }) as never);
     const ws = make(this.o.client.signalsWsUrl, { 'x-api-key': this.o.client.apiKey });
     this.ws = ws;
-    ws.on('open', () => { this.backoff = 1000; this.o.onEvent?.({ type: 'connected' }); });
+    let alive = true;
+    ws.on('open', () => {
+      this.backoff = 1000;
+      this.o.onEvent?.({ type: 'connected' });
+      // a half-open TCP connection never closes by itself: it is only found by asking
+      this.pinger = setInterval(() => {
+        if (!alive) { ws.terminate(); return; }
+        alive = false;
+        try { ws.ping(); } catch { /* close follows */ }
+      }, this.o.pingIntervalMs ?? 20_000);
+    });
+    ws.on('pong', () => { alive = true; });
     ws.on('message', (raw) => {
       let f: { type?: string; data?: Record<string, unknown> };
       try { f = JSON.parse(String(raw)) as typeof f; } catch { return; }
@@ -53,6 +68,7 @@ export class SignalStream {
     });
     ws.on('error', () => undefined);   // a close follows
     ws.on('close', (code) => {
+      if (this.pinger) clearInterval(this.pinger);
       this.o.onEvent?.({ type: 'disconnected', code });
       if (code === CLOSE_SIGNALS_REPLACED) return this.end('replaced by a newer connection');
       if (this.stopped) return;

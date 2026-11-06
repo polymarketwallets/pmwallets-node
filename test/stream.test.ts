@@ -259,6 +259,22 @@ describe('SignalStream', () => {
     expect(h.socks).toHaveLength(2);
     expect(h.events.at(-1)).toMatchObject({ type: 'stopped' });
   });
+  it('a connection that stops answering pings is dropped and replaced; one that answers is kept', async () => {
+    const socks: FakeSocket[] = [];
+    const client = new PmwClient({ apiKey: 'pmw_a_b', baseUrl: 'https://api.example.com' });
+    const s = new SignalStream({ client, onAlert: () => undefined, pingIntervalMs: 10, maxBackoffMs: 1, socketFactory: () => { const k = new FakeSocket(); socks.push(k); return k; } });
+    s.start();
+    socks[0]!.fire('open');
+    const answering = setInterval(() => socks[0]!.fire('pong'), 2);
+    await new Promise((r) => setTimeout(r, 60));
+    clearInterval(answering);
+    expect(socks[0]!.terminated).toBe(false);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(socks[0]!.terminated).toBe(true);
+    await new Promise((r) => setTimeout(r, 1100));
+    expect(socks).toHaveLength(2);
+    s.stop();
+  });
   it('a plan without signals stops for good', async () => {
     const h = setup(); h.s.start();
     h.socks[0]!.h['unexpected-response']!({}, { statusCode: 403 });
